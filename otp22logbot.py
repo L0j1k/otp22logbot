@@ -9,7 +9,7 @@
 #. @author L0j1k
 #. @contact L0j1k@L0j1k.com
 #. @license BSD3
-#. @version 0.0.1_pre-alpha
+#. @version 0.0.2a
 
 import argparse, os, socket, sys
 
@@ -70,6 +70,11 @@ parser.add_argument('-u', '--user',
 )
 app_args = parser.parse_args()
 
+def socksend( socket, data ):
+  if (app_data['debug'] == True):
+    sysprint('=>['+data+']')
+  socket.send(bytes(data+'\r\n', 'utf-8'))
+
 def sysprint( data ):
   sys.stdout.write(data)
   sys.stdout.flush()
@@ -80,17 +85,15 @@ def process_command( command ):
 
 command_exit = False
 app_data = {
+  'debug': True,
   'kill': False,
   'overlord': 'L0j1k',
-  'version': '0.0.1_prealpha'
+  'phase': 'a',
+  'version': '0.0.2'
 }
 sockbuffer = "";
 
-##@debug
-sysprint('==>['+str(app_data['overlord'])+']\n')
-
-#while command_exit == False:
-sysprint('otp22logbot.py '+app_data['version']+' by L0j1k\n')
+sysprint('otp22logbot.py '+app_data['version']+app_data['phase']+' by L0j1k\n')
 if (app_args.init != False):
   sysprint('[+] using configuration file: '+str(app_args.init.name)+'\n')
 sysprint('[+] using output logfile '+str(app_args.output.name)+'\n')
@@ -102,30 +105,74 @@ sock.connect((app_args.server, app_args.port))
 ## @todo accept a server password
 #if (app_args.password != False):
 #  sock.send(bytes('PASS '+app_args.password+'\r\n'), 'utf-8')
-sock.send(bytes('NICK '+app_args.nick+'\r\n', 'utf-8'))
-sock.send(bytes('USER '+app_args.user+' '+app_args.server+' default :'+app_args.real+'\r\n', 'utf-8'))
-sock.send(bytes('JOIN #'+app_args.channel+'\r\n', 'utf-8'))
-sock.send(bytes('PRIVMSG '+app_data['overlord']+': Greetings, overlord. I am for you.\r\n', 'utf-8'))
+socksend(sock, 'NICK '+app_args.nick)
+socksend(sock, 'USER '+app_args.user+' '+app_args.server+' default :'+app_args.real)
+socksend(sock, 'JOIN #'+app_args.channel)
+socksend(sock, 'PRIVMSG '+app_data['overlord']+' :Greetings, overlord. I am for you.')
+socksend(sock, 'PRIVMSG #'+app_args.channel+' :I am a logbot and I am ready!')
+
+## @debug
+# ==>outgoing private message
+#:sendak.freenode.net 401 otp22logbot L0j1k: :No such nick/channel
+# ==>inbound channel traffic
+#:L0j1k!~default@unaffiliated/l0j1k PRIVMSG #ircugm :hello
+#:L0j1k!~default@unaffiliated/l0j1k PRIVMSG #ircugm :foo bar
+# ==>inbound private message
+#:L0j1k!~default@unaffiliated/l0j1k PRIVMSG otp22logbot :hello
+#:L0j1k!~default@unaffiliated/l0j1k PRIVMSG otp22logbot :little bunny foo foo
 
 while app_data['kill'] == False:
   sock_buffer = sock.recv(1024).decode('utf-8')
+  sendbuffer = ""
   sysprint(sock_buffer)
   if (sock_buffer.find('PING') != -1):
-    sock.send(bytes('PONG '+sock_buffer.split()[1]+'\n', 'utf-8'))
+    socksend(sock, 'PONG '+sock_buffer.split()[1]+'\n')
   if (sock_buffer.find('PRIVMSG') != -1):
+    ## @debug1
+    sysprint('handling shit...\n')
+    ## @task handle input lengths. do not parse input of varied lengths.
     message = sock_buffer.split(':')
-    message_header = message[1].split()
-    message_body = message[2].split()
-    this_command = message_body[0]
-    this_extra = message_body[1]
-    this_requester = message_header[1]
-    if (this_command.find('@help') != -1):
-      sock.send(bytes('PRIVMSG '+this_requester+': \n', 'utf-8'))
-    if (this_command.find('@kill') != -1):
-      if (this_extra == 'killme'):
-        app_data['kill'] = True
-        sock.send(bytes('PRIVMSG '+this_requester+': With urgency, my lord. Dying at your request.\n', 'utf-8'))
-    if (this_command.find('@last') != -1):
-      sock.send(bytes('PRIVMSG '+this_requester+': \n', 'utf-8'))
-    if (this_command.find('@version') != -1):
-      sock.send(bytes('PRIVMSG '+this_requester+': \n', 'utf-8'))
+    ## @debug1
+    sysprint('len(msg)['+str(len(message))+']\n')
+    if (len(message) != 3):
+      continue
+    else:
+      message_header = message[1].strip().split(' ')
+      message_body = message[2].strip().split(' ')
+    ## @debug2
+    print(message_header)
+    print(message_body)
+    if (len(message_body) == 0):
+      continue
+    elif (len(message_body) > 3):
+      continue
+    this_command = False
+    this_parameter = False
+    this_modifier = False
+    if (len(message_body) > 0):
+      this_command = message_body[0]
+    if (len(message_body) > 1):
+      this_parameter = message_body[1]
+    if (len(message_body) > 2):
+      this_modifier = message_body[2]
+    if (len(message_header) > 0):
+      this_channel = message_header[2]
+      this_requester = message_header[0].split('!')[0]
+    else:
+      continue
+    ## @debug1
+    sysprint('cmd['+str(this_command)+'] param['+str(this_parameter)+'] mod['+str(this_modifier)+'] req['+str(this_requester)+']\n')
+    if (this_command == '.help'):
+      this_help = "Eat me. There's your help!"
+      socksend(sock, 'PRIVMSG '+str(this_channel)+' :'+this_help)
+    if (this_command == '.last'):
+      socksend(sock, 'PRIVMSG '+str(this_channel)+' :')
+    if (this_command == '.version'):
+      socksend(sock, 'PRIVMSG '+str(this_channel)+' :'+app_data['version']+app_data['phase']+' by '+app_data['overlord'])
+    if (this_requester != app_args.channel):
+      if (this_command == '.kill'):
+        if (this_parameter == 'killme'):
+          if (this_modifier == 'now'):
+            app_data['kill'] = True
+          socksend(sock, 'PRIVMSG '+str(this_requester)+' :With urgency, my lord. Dying at your request.')
+          socksend(sock, 'QUIT :killed by '+str(this_requester))
