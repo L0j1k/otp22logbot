@@ -11,7 +11,7 @@
 #. @license BSD3
 #. @version 0.0.4a
 
-import argparse, datetime, os, socket, sys
+import argparse, datetime, os, socket, sys, time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--channel',
@@ -95,6 +95,7 @@ app_data = {
   'overlord': 'L0j1k',
   'phase': 'a',
   'timeformat': '%H:%M:%S',
+  'timeformat_extended': '',
   'version': '0.0.4'
 }
 sockbuffer = "";
@@ -120,20 +121,26 @@ socksend(sock, 'PRIVMSG '+app_data['overlord']+' :Greetings, overlord. I am for 
 socksend(sock, 'PRIVMSG #'+app_args.channel+' :I am a logbot and I am ready! Use ".help" for help.')
 
 ## @debug
-# ==>outgoing private message
+# ==> outgoing private message
 #:sendak.freenode.net 401 otp22logbot L0j1k: :No such nick/channel
-# ==>inbound channel traffic
+# ==> inbound channel traffic
 #:L0j1k!~default@unaffiliated/l0j1k PRIVMSG #ircugm :hello
 #:L0j1k!~default@unaffiliated/l0j1k PRIVMSG #ircugm :foo bar
-# ==>inbound private message
+# ==> inbound private message
 #:L0j1k!~default@unaffiliated/l0j1k PRIVMSG otp22logbot :hello
 #:L0j1k!~default@unaffiliated/l0j1k PRIVMSG otp22logbot :little bunny foo foo
+# ==> user quits
+#:Guest80053!~default@cpe-70-112-152-59.austin.res.rr.com QUIT :Quit: leaving
+# ==> user joins
+#:default!~default@cpe-70-112-152-59.austin.res.rr.com JOIN #ircugm
+# ==> nick change
+#:default!~default@cpe-70-112-152-59.austin.res.rr.com NICK :Guest64847
 last_message = ''
 this_message = ''
 users = {}
 
 while app_data['kill'] == False:
-  this_time = datetime.datetime.now().strftime(app_data['timeformat'])
+  timestamp = time.time()
   sock_buffer = sock.recv(1024).decode('utf-8')
   sendbuffer = ""
   ## @debug1
@@ -162,11 +169,13 @@ while app_data['kill'] == False:
       this_requester = str(message_header[0].split('!')[0])
     ## @task handle regular messages to the channel
     last_message = this_message
-    this_message = '<'+this_time+'> '+this_requester+' ('+this_channel+'): '+message[2]
+    this_message = '<'+datetime.datetime.fromtimestamp(timestamp).strftime(app_data['timeformat'])+'> '+this_requester+' ('+this_channel+'): '+message[2]
     users[this_requester] = {
+      'altnicks': [],
       'channel': this_channel,
       'message': message[2],
-      'seen': this_time
+      'seen': timestamp,
+      'time': timestamp
     }
     filesend(app_args.output, this_message)
     if (len(message_body) > 3):
@@ -203,7 +212,13 @@ while app_data['kill'] == False:
     elif (this_command == '.last'):
       socksend(sock, 'PRIVMSG '+this_channel+' :'+last_message)
     elif (this_command == '.user'):
-      socksend(sock, 'PRIVMSG '+this_channel+' :user')
+      if this_parameter in users:
+        this_time = datetime.datetime.fromtimestamp(users[this_requester]['timestamp']).strftime(app_data['timeformat_extended'])
+        user_lastmsg = datetime.datetime.fromtimestamp(users[]['time']).strftime(app_data['timeformat_extended'])
+        send_message = 'User '+this_parameter+' (last seen '+this_time+'), (last message '+user_lastmsg+' -- '+users[this_requester]['message']+')'
+      else:
+        send_message = 'Information unavailable for user '+this_parameter
+      socksend(sock, 'PRIVMSG '+this_channel+' :'+send_message)
     elif (this_command == '.version'):
       socksend(sock, 'PRIVMSG '+this_channel)+' :'+app_data['version']+app_data['phase']+' by '+app_data['overlord'])
     elif (this_requester != app_args.channel):
@@ -214,6 +229,10 @@ while app_data['kill'] == False:
           socksend(sock, 'PRIVMSG '+this_requester+' :With urgency, my lord. Dying at your request.')
           socksend(sock, 'PRIVMSG '+this_channel+' :Goodbye!')
           socksend(sock, 'QUIT :killed by '+this_requester)
+    elif (this_command == '\x01VERSION\x01'):
+      ## @task respond to CTCP VERSION
+      send_message = '\x01VERSION OTP22LogBot v'app_data['version']+app_data['phase']'\x01'
+      socksend(sock, 'NOTICE '+this_requester+' :'send_message)
 
 end_message = '[+] CONNECTION STOPPED ... dying at '+datetime.datetime.now().strftime(app_data['timeformat']+'\n')
 filesend(app_args.output, end_message)
