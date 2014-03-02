@@ -214,25 +214,24 @@ while app_data['kill'] == False:
     elif (this_command == '.user'):
       if this_parameter in users:
         this_time = datetime.datetime.fromtimestamp(users[this_requester]['timestamp']).strftime(app_data['timeformat_extended'])
-        user_lastmsg = datetime.datetime.fromtimestamp(users[]['time']).strftime(app_data['timeformat_extended'])
+        user_lastmsg = datetime.datetime.fromtimestamp(users[this_requester]['time']).strftime(app_data['timeformat_extended'])
         send_message = 'User '+this_parameter+' (last seen '+this_time+'), (last message '+user_lastmsg+' -- '+users[this_requester]['message']+')'
       else:
         send_message = 'Information unavailable for user '+this_parameter
       socksend(sock, 'PRIVMSG '+this_channel+' :'+send_message)
     elif (this_command == '.version'):
-      socksend(sock, 'PRIVMSG '+this_channel)+' :'+app_data['version']+app_data['phase']+' by '+app_data['overlord'])
-    elif (this_requester != app_args.channel):
+      socksend(sock, 'PRIVMSG '+this_channel+' :'+app_data['version']+app_data['phase']+' by '+app_data['overlord'])
+    elif (this_channel != app_args.channel):
       if (this_command == '.kill'):
         if (this_parameter == app_args.kill):
-          if (this_modifier == 'now'):
-            app_data['kill'] = True
+          app_data['kill'] = True
           socksend(sock, 'PRIVMSG '+this_requester+' :With urgency, my lord. Dying at your request.')
           socksend(sock, 'PRIVMSG '+this_channel+' :Goodbye!')
           socksend(sock, 'QUIT :killed by '+this_requester)
     elif (this_command == '\x01VERSION\x01'):
       ## @task respond to CTCP VERSION
-      send_message = '\x01VERSION OTP22LogBot v'app_data['version']+app_data['phase']'\x01'
-      socksend(sock, 'NOTICE '+this_requester+' :'send_message)
+      send_message = '\x01VERSION OTP22LogBot v'+app_data['version']+app_data['phase']+'\x01'
+      socksend(sock, 'NOTICE '+this_requester+' :'+send_message)
 
 end_message = '[+] CONNECTION STOPPED ... dying at '+datetime.datetime.now().strftime(app_data['timeformat']+'\n')
 filesend(app_args.output, end_message)
