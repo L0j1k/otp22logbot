@@ -9,7 +9,7 @@
 #. @author L0j1k
 #. @contact L0j1k@L0j1k.com
 #. @license BSD3
-#. @version 0.0.3a
+#. @version 0.0.4a
 
 import argparse, datetime, os, socket, sys
 
@@ -72,12 +72,12 @@ app_args = parser.parse_args()
 
 def filesend( handle, data ):
   if (app_data['debug'] == True):
-    sysprint('=WRITING=>['+data+']')
-  handle.write(str(data+'\n'))
+    sysprint('=WRITING=>['+data+']\n')
+  handle.write(str(data))
 
 def socksend( socket, data ):
   if (app_data['debug'] == True):
-    sysprint('=SENDING=>['+data+']')
+    sysprint('=SENDING=>['+data+']\n')
   socket.send(bytes(data+'\r\n', 'utf-8'))
 
 def sysprint( data ):
@@ -95,17 +95,17 @@ app_data = {
   'overlord': 'L0j1k',
   'phase': 'a',
   'timeformat': '%H:%M:%S',
-  'version': '0.0.3'
+  'version': '0.0.4'
 }
 sockbuffer = "";
 
 sysprint('otp22logbot.py '+app_data['version']+app_data['phase']+' by L0j1k\n')
-sysprint('[+] started at '+datetime.datetime.now().strftime(app_data['timeformat']))
+sysprint('[+] started at '+datetime.datetime.now().strftime(app_data['timeformat']+'\n'))
 if (app_args.init != False):
   sysprint('[+] using configuration file: '+app_args.init.name+'\n')
 sysprint('[+] using output logfile '+app_args.output.name+'\n')
 sysprint('[+] using server '+app_args.server+' on port '+str(app_args.port)+'\n')
-sysprint('[+] using timestamp format '+app_args.timeformat+'\n')
+sysprint('[+] using timestamp format '+app_data['timeformat']+'\n')
 
 sock = socket.socket()
 sock.connect((app_args.server, app_args.port))
@@ -117,7 +117,7 @@ socksend(sock, 'NICK '+app_args.nick)
 socksend(sock, 'USER '+app_args.user+' '+app_args.server+' default :'+app_args.real)
 socksend(sock, 'JOIN #'+app_args.channel)
 socksend(sock, 'PRIVMSG '+app_data['overlord']+' :Greetings, overlord. I am for you.')
-socksend(sock, 'PRIVMSG #'+app_args.channel+' :I am a logbot and I am ready!')
+socksend(sock, 'PRIVMSG #'+app_args.channel+' :I am a logbot and I am ready! Use ".help" for help.')
 
 ## @debug
 # ==>outgoing private message
@@ -129,6 +129,8 @@ socksend(sock, 'PRIVMSG #'+app_args.channel+' :I am a logbot and I am ready!')
 #:L0j1k!~default@unaffiliated/l0j1k PRIVMSG otp22logbot :hello
 #:L0j1k!~default@unaffiliated/l0j1k PRIVMSG otp22logbot :little bunny foo foo
 last_message = ''
+this_message = ''
+users = {}
 
 while app_data['kill'] == False:
   this_time = datetime.datetime.now().strftime(app_data['timeformat'])
@@ -156,44 +158,64 @@ while app_data['kill'] == False:
     if (len(message_body) == 0):
       continue
     if (len(message_header) > 0):
-      this_channel = message_header[2]
-      this_requester = message_header[0].split('!')[0]
+      this_channel = str(message_header[2])
+      this_requester = str(message_header[0].split('!')[0])
     ## @task handle regular messages to the channel
     last_message = this_message
-    this_message = '<'+this_time+'> 'str(this_requester)+' ('+str(this_channel)+'):'+str(message[2])
+    this_message = '<'+this_time+'> '+this_requester+' ('+this_channel+'): '+message[2]
+    users[this_requester] = {
+      'channel': this_channel,
+      'message': message[2],
+      'seen': this_time
+    }
     filesend(app_args.output, this_message)
-    elif (len(message_body) > 3):
+    if (len(message_body) > 3):
       continue
     this_command = False
     this_parameter = False
     this_modifier = False
     if (len(message_body) > 0):
-      this_command = message_body[0]
+      this_command = str(message_body[0])
     if (len(message_body) > 1):
-      this_parameter = message_body[1]
+      this_parameter = str(message_body[1])
     if (len(message_body) > 2):
-      this_modifier = message_body[2]
-    else:
-      continue
+      this_modifier = str(message_body[2])
     ## @debug1
-    sysprint('cmd['+str(this_command)+'] param['+str(this_parameter)+'] mod['+str(this_modifier)+'] req['+str(this_requester)+']\n')
-    if (this_command == '.help'):
-      this_help = "Eat me. There's your help!"
-      socksend(sock, 'PRIVMSG '+str(this_channel)+' :'+this_help)
+    sysprint('cmd['+this_command+'] param['+this_parameter+'] mod['+this_modifier+'] req['+this_requester+']\n')
+    if (this_command == '.flush'):
+      socksend(sock, 'PRIVMSG '+this_channel+' :Flushing and rotating logfiles...')
+    elif (this_command == '.help'):
+      if (this_parameter == False):
+        send_message = 'Available commands (use .help <command> for more help): flush, help, kill, last, user, version'
+      elif (this_parameter == 'flush'):
+        send_message = ".flush: flush and rotate logfiles"
+      elif (this_parameter == 'help'):
+        send_message = ".help <command>: lists help for a specific command"
+      elif (this_parameter == 'kill'):
+        send_message = ".kill: attempts to kill this bot (good luck)"
+      elif (this_parameter == 'last'):
+        send_message = ".last [user]: displays last message received. if [user] is specified, displays last message sent by user"
+      elif (this_parameter == 'user'):
+        send_message = ".user [user]: displays information about user. if unspecified, defaults to command requester"
+      elif (this_parameter == 'version'):
+        send_message = ".version: displays version information"
+      socksend(sock, 'PRIVMSG '+this_channel+' :'+send_message)
     elif (this_command == '.last'):
-      socksend(sock, 'PRIVMSG '+str(this_channel)+' :'+last_message)
+      socksend(sock, 'PRIVMSG '+this_channel+' :'+last_message)
+    elif (this_command == '.user'):
+      socksend(sock, 'PRIVMSG '+this_channel+' :user')
     elif (this_command == '.version'):
-      socksend(sock, 'PRIVMSG '+str(this_channel)+' :'+app_data['version']+app_data['phase']+' by '+app_data['overlord'])
+      socksend(sock, 'PRIVMSG '+this_channel)+' :'+app_data['version']+app_data['phase']+' by '+app_data['overlord'])
     elif (this_requester != app_args.channel):
       if (this_command == '.kill'):
         if (this_parameter == app_args.kill):
           if (this_modifier == 'now'):
             app_data['kill'] = True
-          socksend(sock, 'PRIVMSG '+str(this_requester)+' :With urgency, my lord. Dying at your request.')
-          socksend(sock, 'PRIVMSG '+str(this_channel)+' :Goodbye!')
-          socksend(sock, 'QUIT :killed by '+str(this_requester))
-      
-end_message = '[+] CONNECTION STOPPED ... dying at '+datetime.datetime.now().strftime(app_data['timeformat'])
+          socksend(sock, 'PRIVMSG '+this_requester+' :With urgency, my lord. Dying at your request.')
+          socksend(sock, 'PRIVMSG '+this_channel+' :Goodbye!')
+          socksend(sock, 'QUIT :killed by '+this_requester)
+
+end_message = '[+] CONNECTION STOPPED ... dying at '+datetime.datetime.now().strftime(app_data['timeformat']+'\n')
 filesend(app_args.output, end_message)
 sysprint(end_message)
 app_args.output.close()
